@@ -1,0 +1,46 @@
+name: Build Apollo (Windows)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout (with libraries)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Official Node.js (MSYS2's own nodejs crashes, see Apollo docs/building.md)
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          path-type: inherit
+          install: >- git mingw-w64-ucrt-x86_64-boost mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-cppwinrt mingw-w64-ucrt-x86_64-curl-winssl mingw-w64-ucrt-x86_64-MinHook mingw-w64-ucrt-x86_64-miniupnpc mingw-w64-ucrt-x86_64-nsis mingw-w64-ucrt-x86_64-onevpl mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-opus mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-nlohmann_json mingw-w64-ucrt-x86_64-ninja 
+      - name: Apply OBS capture patch
+        shell: msys2 {0}
+        run: | git apply --check apollo-obs-capture.patch git apply apollo-obs-capture.patch 
+      - name: Configure
+        shell: msys2 {0}
+        run: cmake -B build -G Ninja -S . -DBUILD_DOCS=OFF -DBUILD_TESTS=OFF
+
+      - name: Build
+        shell: msys2 {0}
+        run: ninja -C build
+
+      - name: Package
+        shell: msys2 {0}
+        run: | cpack -G ZIP --config ./build/CPackConfig.cmake cpack -G NSIS --config ./build/CPackConfig.cmake || true 
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Apollo-Windows
+          path: | build/cpack_artifacts/* build/*.zip build/*.exe           if-no-files-found: warn
